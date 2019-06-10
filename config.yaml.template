@@ -1,0 +1,5 @@
+aliyunaccesskey: "16位key"
+aliyunaccesssecret: "30位secret"
+baseaddr: "127.0.0.1:13333"
+mongodb:
+  uri: "mongodb://username:password@url:port"
