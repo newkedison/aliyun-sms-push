@@ -83,3 +83,11 @@ func isIpAllow(ip string) bool {
 	}
 	return false
 }
+
+func printError(info string, err error) {
+	if info != "" {
+		print(info+":", err)
+	} else {
+		print(err)
+	}
+}

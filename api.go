@@ -127,7 +127,7 @@ func QuerySendRecord(c *gin.Context) {
 	}
 	cursor, err := colSendRecord.Find(c, query, opt)
 	if err != nil {
-		dump(err)
+		printError("Read send record from db", err)
 		setErrorCode(c, 50003, "读取数据库错误")
 		return
 	}
@@ -138,7 +138,7 @@ func QuerySendRecord(c *gin.Context) {
 		var record SendRecord
 		err := cursor.Decode(&record)
 		if err != nil {
-			dump(err)
+			printError("Decode send record", err)
 			setErrorCode(c, 50004, "解析数据库返回值错误")
 			return
 		}

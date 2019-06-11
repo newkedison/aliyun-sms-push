@@ -60,12 +60,11 @@ func createUniqueIndex(ctx context.Context) {
 		},
 		options.Index().SetName("unique_phone").SetUnique(true),
 	}
-	res, err := colPhoneList.Indexes().CreateOne(
+	_, err := colPhoneList.Indexes().CreateOne(
 		ctx, indexModel, options.CreateIndexes())
 	if err != nil {
-		dump(err)
+		printError("CreateIndex fail", err)
 	}
-	print(res)
 
 	indexModel = mongo.IndexModel{
 		bson.D{
@@ -73,12 +72,11 @@ func createUniqueIndex(ctx context.Context) {
 		},
 		options.Index().SetName("unique_ip").SetUnique(true),
 	}
-	res, err = colIpList.Indexes().CreateOne(
+	_, err = colIpList.Indexes().CreateOne(
 		ctx, indexModel, options.CreateIndexes())
 	if err != nil {
-		dump(err)
+		printError("CreateIndex fail", err)
 	}
-	print(res)
 }
 
 func connectToDB(uri string) error {
@@ -94,19 +92,23 @@ func connectToDB(uri string) error {
 	}
 	client, err := mongo.NewClient(option)
 	if err != nil {
+		printError("NewClient fail", err)
 		return err
 	}
 	err = client.Connect(ctx)
 	if err != nil {
+		printError("Connect fail", err)
 		return err
 	}
 	err = client.Ping(ctx, nil)
 	if err != nil {
+		printError("Ping fail", err)
 		client.Disconnect(ctx)
 		return err
 	}
 	_, err = client.ListDatabases(ctx, bson.D{})
 	if err != nil {
+		printError("ListDatabases fail", err)
 		client.Disconnect(ctx)
 		return err
 	}

@@ -33,8 +33,13 @@ func (p *program) Start(s service.Service) error {
 	} else {
 		print("Running under service manager.")
 	}
-	p.exit = make(chan struct{})
 
+	err := connectToDB(globalConfig.MongoDB.URI)
+	if err != nil {
+		printError("connectToDB", err)
+		return err
+	}
+	p.exit = make(chan struct{})
 	// Start should not block. Do the actual work async.
 	go p.run()
 	return nil
@@ -44,12 +49,8 @@ func (p *program) run() error {
 	print("I'm running", service.Platform())
 	tickerAlive := time.NewTicker(60 * time.Second)
 	tickerUpdateConfig := time.NewTicker(30 * time.Second)
-	err := connectToDB(globalConfig.MongoDB.URI)
-	if err != nil {
-		return err
-	}
 	test_db()
-	updateWhiteList(getContextWithTimeout(200))
+	updateWhiteList(getContextWithTimeout(1000))
 	go func() {
 		for {
 			select {
@@ -60,12 +61,11 @@ func (p *program) run() error {
 			case <-p.exit:
 				tickerAlive.Stop()
 				tickerUpdateConfig.Stop()
-				print("disconnecting")
-				err = dbClient.Disconnect(getContextWithTimeout(1000))
+				err := dbClient.Disconnect(getContextWithTimeout(1000))
 				if err != nil {
-					panic(err)
+					printError("disconnect when exit", err)
 				}
-				print("disconnected")
+				return
 			}
 		}
 	}()
@@ -90,9 +90,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err != nil {
-		log.Fatal(err)
-	}
 	globalConfig = readConfig(DefaultConfigFile)
 	if globalConfig == nil {
 		panic("读取配置文件失败")
@@ -100,47 +97,41 @@ func main() {
 
 	err = s.Run()
 	if err != nil {
-		print(err)
+		printError("service.Run", err)
 	}
 }
 
 func updateAllowedPhoneListFromDb(ctx context.Context) {
 	cursor, err := colPhoneList.Find(ctx, bson.D{})
 	if err != nil {
-		dump(err)
+		printError("find phone list form db", err)
+		return
 	}
-	var result []allowedPhone
 	for cursor.Next(ctx) {
 		var r allowedPhone
 		err := cursor.Decode(&r)
 		if err != nil {
-			dump(err)
+			printError("decode phone from db", err)
 			break
 		}
-		result = append(result, r)
-	}
-	for _, s := range result {
-		allowPhoneList = append(allowPhoneList, s.Phone)
+		allowPhoneList = append(allowPhoneList, r.Phone)
 	}
 }
 
 func updateAllowedIpListFromDb(ctx context.Context) {
 	cursor, err := colIpList.Find(ctx, bson.D{})
 	if err != nil {
-		dump(err)
+		printError("find ip list from db", err)
+		return
 	}
-	var result []allowedIp
 	for cursor.Next(ctx) {
 		var r allowedIp
 		err := cursor.Decode(&r)
 		if err != nil {
-			dump(err)
+			printError("decode ip from db", err)
 			break
 		}
-		result = append(result, r)
-	}
-	for _, s := range result {
-		allowIpList = append(allowIpList, s.Ip)
+		allowIpList = append(allowIpList, r.Ip)
 	}
 }
 
