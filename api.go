@@ -97,7 +97,10 @@ func QuerySendDetailRaw(c *gin.Context) {
 	result := querySmsDetail(phoneNumber)
 	c.JSON(200, gin.H{
 		"Code": 20000,
-		"Data": result,
+		"Data": gin.H{
+			"count": len(result),
+			"data":  result,
+		},
 	})
 }
 
@@ -105,7 +108,7 @@ func QuerySendRecord(c *gin.Context) {
 	query := bson.D{}
 	phoneNumber := c.Query("phone")
 	if phoneNumber != "" {
-		query = append(query, bson.E{"phonenumber", phoneNumber})
+		query = append(query, bson.E{Key: "phonenumber", Value: phoneNumber})
 	}
 	pageSize, err := strconv.Atoi(c.DefaultQuery("pagesize", "20"))
 	if err != nil || pageSize <= 0 || pageSize > 500 {
@@ -147,6 +150,9 @@ func QuerySendRecord(c *gin.Context) {
 	updateSendRecordsFromAliyun(records)
 	c.JSON(200, gin.H{
 		"Code": 20000,
-		"Data": records,
+		"Data": gin.H{
+			"count": len(records),
+			"data":  records,
+		},
 	})
 }
