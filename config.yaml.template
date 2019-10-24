@@ -3,3 +3,7 @@ aliyunaccesssecret: "30位secret"
 baseaddr: "127.0.0.1:13333"
 mongodb:
   uri: "mongodb://username:password@url:port"
+# 阿里云审核通过的短信签名
+smssignname: "短信签名"
+# 阿里云审核通过的短信模板的ID
+smstemplatecode: "SMS_000000000"
