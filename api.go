@@ -144,6 +144,7 @@ func QuerySendRecord(c *gin.Context) {
 		}
 		records = append(records, record)
 	}
+	updateSendRecordsFromAliyun(records)
 	c.JSON(200, gin.H{
 		"Code": 20000,
 		"Data": records,

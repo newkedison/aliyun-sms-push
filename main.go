@@ -8,7 +8,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"go.mongodb.org/mongo-driver/bson"
 	//   "go.mongodb.org/mongo-driver/mongo"
-	//   "go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	//   "go.mongodb.org/mongo-driver/mongo/options"
 	"github.com/kardianos/service"
 )
@@ -49,7 +49,9 @@ func (p *program) run() error {
 	print("I'm running", service.Platform())
 	tickerAlive := time.NewTicker(60 * time.Second)
 	tickerUpdateConfig := time.NewTicker(30 * time.Second)
+	tickerUpdateSmsSendStatus := time.NewTicker(6 * time.Hour)
 	test_db()
+	updateSmsSendStatus()
 	updateWhiteList(getContextWithTimeout(1000))
 	go func() {
 		for {
@@ -58,6 +60,8 @@ func (p *program) run() error {
 				print("Still running at ", tm)
 			case <-tickerUpdateConfig.C:
 				updateWhiteList(getContextWithTimeout(1000))
+			case <-tickerUpdateSmsSendStatus.C:
+				updateSmsSendStatus()
 			case <-p.exit:
 				tickerAlive.Stop()
 				tickerUpdateConfig.Stop()
@@ -76,6 +80,30 @@ func (p *program) Stop(s service.Service) error {
 	// Any work in Stop should be quick, usually a few seconds at most.
 	print("I'm Stopping!")
 	close(p.exit)
+	return nil
+}
+
+func updateSmsSendStatus() error {
+	var records []SendRecord
+	cursor, err := colSendRecord.Find(ctxEmpty, bson.M{
+		"createdat": bson.M{
+			"$gte": primitive.NewDateTimeFromTime(time.Now().Add(-time.Hour * 24 * 35)),
+		},
+		"errcode": "",
+	})
+	if err != nil {
+		dump(err)
+		return err
+	}
+	if err := cursor.All(ctxEmpty, &records); err != nil {
+		dump(err)
+		return err
+	}
+	if err := updateSendRecordsFromAliyun(records); err != nil {
+		return err
+	}
+	dump(records)
+	print("Update SMS send state finished")
 	return nil
 }
 

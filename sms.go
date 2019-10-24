@@ -8,6 +8,7 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/dysmsapi"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 type sendSmsResponse struct {
@@ -94,7 +95,7 @@ func sendDeviceState(phoneNumber string, user string, deviceId string, state str
 	return nil
 }
 
-func parseStatusCode(code int) string {
+func parseStatusCode(code int64) string {
 	switch code {
 	case 1:
 		return "等待回执"
@@ -152,6 +153,82 @@ func querySmsDetailByDate(
 	}
 
 	return result, nil
+}
+
+func findRecordByExtraInfo(records []SendRecord, info string) *SendRecord {
+	for n := range records {
+		if records[n].ExtraInfo == info {
+			return &records[n]
+		}
+	}
+	return nil
+}
+
+func updateSendRecordsFromAliyun(records []SendRecord) error {
+	needUpdate := false
+	now := time.Now()
+	// 整理出需要查询的记录, 按手机号码和发送日期归类
+	all := make(map[string]map[string]bool)
+	for n := range records {
+		rec := &records[n]
+		if rec.SendStatus == parseStatusCode(2) || // 已更新过状态, 发送失败
+			rec.SendStatus == parseStatusCode(3) || // 已更新过状态, 发送成功
+			now.Sub(rec.CreatedAt).Hours() > 35*24 { // 阿里云只能查30天的记录, 这里放宽到35天
+			continue
+		}
+		if all[rec.PhoneNumber] == nil {
+			all[rec.PhoneNumber] = make(map[string]bool)
+		}
+		all[rec.PhoneNumber][rec.CreatedAt.Format("20060102")] = true
+		needUpdate = true
+	}
+	if !needUpdate {
+		return nil
+	}
+	// 连接阿里云服务器
+	client, err := dysmsapi.NewClientWithAccessKey(globalConfig.SmsZone,
+		globalConfig.AliyunAccessKey, globalConfig.AliyunAccessSecret)
+	if err != nil {
+		dump(err)
+		return err
+	}
+	// 开始查询, 遍历每个手机号码的每个日期
+	for phoneNum, dateList := range all {
+		for s := range dateList {
+			// 这里先查出这个手机号码在这一天的所有短信发送记录
+			data, err := querySmsDetailByDate(client, phoneNum, s)
+			if err != nil {
+				dump(err)
+				continue
+			}
+			// 然后对于每条记录, 根据 ExtraInfo 再回去 records 里面找,
+			// 如果有对应的, 则更新该记录, 如果没对应的, 则忽略
+			for n := range data {
+				record := findRecordByExtraInfo(records, data[n].ExtraInfo)
+				if record != nil {
+					record.SendStatus = data[n].SendStatus
+					record.ErrCode = data[n].ErrCode
+					record.Content = data[n].Content
+					// 阿里云存储的是UTC+8的时间, 但是返回的字符串没有带时区
+					// 所以这里需要按UTC+8来解析, 结果才正确
+					tz := time.FixedZone("UTC+8", 8*60*60)
+					record.SendDate, _ = time.ParseInLocation(
+						"2006-01-02 15:04:05", data[n].SendDate, tz)
+					record.ReceiveDate, _ = time.ParseInLocation(
+						"2006-01-02 15:04:05", data[n].ReceiveDate, tz)
+					// 对于找到的每条记录, 更新数据库中对应的记录, 这里本来应该
+					// 用 UpdateOne, 不过用 ReplaceOne 可以省得列出每个修改项,
+					// 所以就偷懒了
+					_, err := colSendRecord.ReplaceOne(ctxEmpty,
+						bson.M{"_id": record.Id}, record)
+					if err != nil {
+						dump(err)
+					}
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func querySmsDetail(phoneNumber string) (result []smsSendDetail) {
